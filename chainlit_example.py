@@ -27,13 +27,8 @@ async def on_message(message: cl.Message):
         "role": "system",
         "content": """You are an advanced AI assistant powered by the deepseek-r1 model.
 
-Your strengths:
-- Providing clear, accurate, and thoughtful responses
-- Being helpful while acknowledging your limitations
-
 Guidelines:
 - If you're uncertain about something, acknowledge it rather than making up information
-- When appropriate, suggest related questions the user might want to ask
 - Format your responses with markdown when it improves readability
 """
     }
@@ -113,6 +108,7 @@ async def start():
     Sends a welcome message when the chat starts.
     """
     await cl.Message(
-        content="👋 Hello! I'm powered by **DeepSeek R1**. I'll show you my thinking process before answering.\n\nTry asking me a math problem or reasoning question!"
+        content="👋 Hello! I'm powered by **DeepSeek R1**. I'll show you my thinking process before answering.\n\n"
+                "Try asking me a math problem or reasoning question!"
     ).send()
 
