@@ -9,31 +9,31 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Display chat history
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        if message["role"] == "assistant" and message.get("thinking"):
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        if msg["role"] == "assistant" and msg.get("thinking"):
             with st.expander("🧠 View Thinking Process", expanded=False):
-                st.markdown(message["thinking"])
-        st.markdown(message["content"])
+                st.markdown(msg["thinking"])
+        st.markdown(msg["content"])
 
 # Chat input
-prompt = st.chat_input("Ask DeepSeek R1")
+user_input = st.chat_input("Ask DeepSeek R1")
 
-if prompt:
+if user_input:
     # Add and display user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
-        st.markdown(prompt)
+        st.markdown(user_input)
 
     # Generate and display assistant response
     with st.chat_message("assistant"):
-        thinking_placeholder = st.empty()
-        message_placeholder = st.empty()
-        full_thinking = ""
-        full_response = ""
+        thinking_display = st.empty()
+        answer_display = st.empty()
+        accumulated_thinking = ""
+        accumulated_answer = ""
 
         with st.spinner("Thinking...", show_time=True):
-            response = ollama.chat(
+            stream = ollama.chat(
                 model="deepseek-r1:1.5b",
                 messages=[{"role": m["role"], "content": m["content"]}
                           for m in st.session_state.messages],
@@ -41,31 +41,31 @@ if prompt:
                 think=True,
             )
 
-            for chunk in response:
-                msg = chunk.get("message", {})
+            for chunk in stream:
+                chunk_msg = chunk.get("message", {})
 
                 # Stream thinking content
-                if msg.get("thinking"):
-                    full_thinking += msg["thinking"]
-                    with thinking_placeholder.container():
+                if chunk_msg.get("thinking"):
+                    accumulated_thinking += chunk_msg["thinking"]
+                    with thinking_display.container():
                         with st.expander("🧠 View Thinking Process", expanded=True):
-                            st.markdown(full_thinking + "▌")
+                            st.markdown(accumulated_thinking + "▌")
 
-                # Stream response content
-                if msg.get("content"):
-                    full_response += msg["content"]
-                    message_placeholder.markdown(full_response + "▌")
+                # Stream answer content
+                if chunk_msg.get("content"):
+                    accumulated_answer += chunk_msg["content"]
+                    answer_display.markdown(accumulated_answer + "▌")
 
         # Final display without cursor
-        if full_thinking:
-            with thinking_placeholder.container():
+        if accumulated_thinking:
+            with thinking_display.container():
                 with st.expander("🧠 View Thinking Process", expanded=False):
-                    st.markdown(full_thinking)
-        message_placeholder.markdown(full_response)
+                    st.markdown(accumulated_thinking)
+        answer_display.markdown(accumulated_answer)
 
         # Save to chat history
         st.session_state.messages.append({
             "role": "assistant",
-            "content": full_response,
-            "thinking": full_thinking or None
+            "content": accumulated_answer,
+            "thinking": accumulated_thinking or None
         })
