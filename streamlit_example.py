@@ -1,8 +1,21 @@
 # Run using: streamlit run streamlit_example.py
 import streamlit as st
 import ollama
+import re
 
 st.set_page_config(page_title="DeepSeek R1 Chat", page_icon="🤖")
+
+
+def convert_latex_delimiters(text):
+    """Convert LaTeX delimiters from \[ \] and \( \) to $$ and $"""
+    # Replace display math: \[ ... \] with $$ ... $$
+    text = re.sub(r'\\\[', '$$', text)
+    text = re.sub(r'\\\]', '$$', text)
+    # Replace inline math: \( ... \) with $ ... $
+    text = re.sub(r'\\\(', '$', text)
+    text = re.sub(r'\\\)', '$', text)
+    return text
+
 
 # Initialize chat history
 if "messages" not in st.session_state:
@@ -13,8 +26,8 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if msg["role"] == "assistant" and msg.get("thinking"):
             with st.expander("🧠 View Thinking Process", expanded=False):
-                st.markdown(msg["thinking"])
-        st.markdown(msg["content"])
+                st.markdown(convert_latex_delimiters(msg["thinking"]))
+        st.markdown(convert_latex_delimiters(msg["content"]))
 
 # Chat input
 user_input = st.chat_input("Ask DeepSeek R1")
@@ -49,19 +62,19 @@ if user_input:
                     accumulated_thinking += chunk_msg["thinking"]
                     with thinking_display.container():
                         with st.expander("🧠 View Thinking Process", expanded=True):
-                            st.markdown(accumulated_thinking + "▌")
+                            st.markdown(convert_latex_delimiters(accumulated_thinking) + "▌")
 
                 # Stream answer content
                 if chunk_msg.get("content"):
                     accumulated_answer += chunk_msg["content"]
-                    answer_display.markdown(accumulated_answer + "▌")
+                    answer_display.markdown(convert_latex_delimiters(accumulated_answer) + "▌")
 
         # Final display without cursor
         if accumulated_thinking:
             with thinking_display.container():
                 with st.expander("🧠 View Thinking Process", expanded=False):
-                    st.markdown(accumulated_thinking)
-        answer_display.markdown(accumulated_answer)
+                    st.markdown(convert_latex_delimiters(accumulated_thinking))
+        answer_display.markdown(convert_latex_delimiters(accumulated_answer))
 
         # Save to chat history
         st.session_state.messages.append({
