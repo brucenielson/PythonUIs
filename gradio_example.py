@@ -1,35 +1,82 @@
 import gradio as gr
+import google.generativeai as genai
+
+# ---------------------------
+# Secret loading
+# ---------------------------
+def get_secret(secret_file: str) -> str:
+    try:
+        with open(secret_file, 'r') as file:
+            secret_text: str = file.read().strip()
+    except FileNotFoundError:
+        print(f"The file '{secret_file}' does not exist.")
+        secret_text = ""
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        raise e
+
+    return secret_text
 
 
-def chat_with_grok(message, chat_history, system_message, model_name, temperature, max_tokens):
-    # Ensure history is a list of message dicts
+# Load Gemini API key
+gemini_secret: str = get_secret(r"D:\Documents\Secrets\gemini_secret.txt")
+genai.configure(api_key=gemini_secret)
+
+
+# ---------------------------
+# Chat handler
+# ---------------------------
+def chat_with_gemini(message, chat_history, system_message, model_name, temperature, max_tokens):
     if chat_history is None:
         chat_history = []
-    # Add user message (Gradio 4.x expects dicts with role/content)
-    chat_history.append({"role": "user", "content": message})
 
-    # Create bot response (replace this with actual API call)
-    bot_message = (
-        f"You selected model: {model_name}\n"
-        f"System message: {system_message}\n"
-        f"Temperature: {temperature}\n"
-        f"Max tokens: {max_tokens}\n\n"
-        f"Your message: {message}"
+    # Convert Gradio history → Gemini history format
+    gemini_history = []
+    if system_message.strip():
+        gemini_history.append({"role": "user", "parts": [f"System message: {system_message}"]})
+
+    for msg in chat_history:
+        role = msg["role"]
+        content = msg["content"]
+
+        gemini_history.append({
+            "role": "user" if role == "user" else "model",
+            "parts": [content]
+        })
+
+    # Append latest user message
+    gemini_history.append({"role": "user", "parts": [message]})
+
+    # Create model
+    model = genai.GenerativeModel(model_name)
+
+    # Generate reply
+    response = model.generate_content(
+        gemini_history,
+        generation_config=genai.types.GenerationConfig(
+            temperature=float(temperature),
+            max_output_tokens=int(max_tokens)
+        )
     )
 
-    # Add assistant message
-    chat_history.append({"role": "assistant", "content": bot_message})
+    bot_reply = response.text
 
-    # Return updated history AND an empty string to clear the input textbox
+    # Append to UI chat
+    chat_history.append({"role": "user", "content": message})
+    chat_history.append({"role": "assistant", "content": bot_reply})
+
     return chat_history, ""
 
 
+# ---------------------------
+# Gradio UI
+# ---------------------------
 with gr.Blocks() as demo:
-    gr.Markdown("# Grok AI Chat Interface")
+    gr.Markdown("# 🌟 Gemini Chat Interface")
 
     with gr.Row():
         with gr.Column(scale=3):
-            chatbot = gr.Chatbot(elem_id="chatbot", height=400)  # value is list of dicts
+            chatbot = gr.Chatbot(type="messages", elem_id="chatbot", height=500)
             msg = gr.Textbox(placeholder="Send a message...", show_label=False)
 
             with gr.Row():
@@ -40,8 +87,8 @@ with gr.Blocks() as demo:
             gr.Markdown("### Model Settings")
 
             model_dropdown = gr.Dropdown(
-                choices=["grok-1", "grok-2", "grok-3-beta"],
-                value="grok-3-beta",
+                choices=["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash"],
+                value="gemini-2.0-flash",
                 label="Model"
             )
 
@@ -62,21 +109,21 @@ with gr.Blocks() as demo:
 
                 max_tokens = gr.Slider(
                     minimum=100,
-                    maximum=4000,
-                    value=1000,
-                    step=100,
+                    maximum=4096,
+                    value=512,
+                    step=50,
                     label="Max Tokens"
                 )
 
-    # Wire up events: outputs are (chatbot, msg) so textbox is cleared
+    # Wire events
     submit_btn.click(
-        chat_with_grok,
+        chat_with_gemini,
         inputs=[msg, chatbot, system_message, model_dropdown, temperature, max_tokens],
         outputs=[chatbot, msg],
     )
 
     msg.submit(
-        chat_with_grok,
+        chat_with_gemini,
         inputs=[msg, chatbot, system_message, model_dropdown, temperature, max_tokens],
         outputs=[chatbot, msg],
     )
