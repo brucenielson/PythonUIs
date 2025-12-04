@@ -22,6 +22,10 @@ if "messages" not in st.session_state:
 # Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
+        # Show thinking if it exists
+        if "thinking" in message and message["thinking"]:
+            with st.expander("🧠 View Thinking Process", expanded=False):
+                st.markdown(message["thinking"])
         st.markdown(message["content"])
 
 if prompt:
@@ -34,32 +38,59 @@ if prompt:
 
     # Processing
     with st.chat_message("assistant"):
+        thinking_placeholder = st.empty()
         message_placeholder = st.empty()
+        full_thinking = ""
         full_response = ""
+        thinking_started = False
+        response_started = False
 
         # Stream the response with a spinner while waiting for the initial response
         with st.spinner("Thinking...", show_time=True):
             response = ollama.chat(
                 model="deepseek-r1:1.5b",
                 messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-                stream=True  # Enable streaming if supported by your ollama version
+                stream=True,
+                think=True,  # This is the correct parameter!
             )
 
-            # If streaming is supported
-            if hasattr(response, '__iter__'):
-                for chunk in response:
-                    if chunk and "message" in chunk and "content" in chunk["message"]:
-                        content = chunk["message"]["content"]
-                        full_response += content
-                        message_placeholder.markdown(full_response + "▌")
-                message_placeholder.markdown(full_response)
-            else:
-                # Fallback for non-streaming response
-                full_response = response["message"]["content"]
-                # Simulate streaming for better UX
-                for word in stream_data(full_response):
-                    message_placeholder.markdown(full_response[:len(word)] + "▌")
-                message_placeholder.markdown(full_response)
+            # Process streaming chunks
+            for chunk in response:
+                # Capture thinking content
+                if "message" in chunk and "thinking" in chunk["message"]:
+                    thinking_content = chunk["message"]["thinking"]
+                    if thinking_content:
+                        full_thinking += thinking_content
+                        if not thinking_started:
+                            thinking_started = True
+                        # Display thinking in an expander
+                        with thinking_placeholder.container():
+                            with st.expander("🧠 View Thinking Process", expanded=True):
+                                st.markdown(full_thinking + "▌")
 
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+                # Capture regular content (final answer)
+                if "message" in chunk and "content" in chunk["message"]:
+                    content = chunk["message"]["content"]
+                    if content:
+                        full_response += content
+                        if not response_started and thinking_started:
+                            # Close the thinking expander when response starts
+                            with thinking_placeholder.container():
+                                with st.expander("🧠 View Thinking Process", expanded=False):
+                                    st.markdown(full_thinking)
+                            response_started = True
+                        message_placeholder.markdown(full_response + "▌")
+
+            # Final display without cursor
+            if full_thinking:
+                with thinking_placeholder.container():
+                    with st.expander("🧠 View Thinking Process", expanded=False):
+                        st.markdown(full_thinking)
+            message_placeholder.markdown(full_response)
+
+        # Add assistant response to chat history with thinking
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": full_response,
+            "thinking": full_thinking if full_thinking else None
+        })
