@@ -1,47 +1,42 @@
 import gradio as gr
-import os
-# from dotenv import load_dotenv
-
-# Load environment variables from .env file
-# load_dotenv()
 
 
-# Function to handle chat interactions
-def chat_with_grok(message, history, system_message, model_name, temperature, max_tokens):
-    # In a real implementation, this would call the Grok API
-    # For now, we'll just echo the inputs to demonstrate the UI is working
-    bot_message = f"You selected model: {model_name}\nSystem message: {system_message}\nTemperature: {temperature}\nMax tokens: {max_tokens}\n\nYour message: {message}"
-    return bot_message
+def chat_with_grok(message, chat_history, system_message, model_name, temperature, max_tokens):
+    # Ensure history is a list of message dicts
+    if chat_history is None:
+        chat_history = []
+    # Add user message (Gradio 4.x expects dicts with role/content)
+    chat_history.append({"role": "user", "content": message})
+
+    # Create bot response (replace this with actual API call)
+    bot_message = (
+        f"You selected model: {model_name}\n"
+        f"System message: {system_message}\n"
+        f"Temperature: {temperature}\n"
+        f"Max tokens: {max_tokens}\n\n"
+        f"Your message: {message}"
+    )
+
+    # Add assistant message
+    chat_history.append({"role": "assistant", "content": bot_message})
+
+    # Return updated history AND an empty string to clear the input textbox
+    return chat_history, ""
 
 
-# Create the Gradio interface
-with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue")) as demo:
+with gr.Blocks() as demo:
     gr.Markdown("# Grok AI Chat Interface")
 
     with gr.Row():
         with gr.Column(scale=3):
-            # Main chat interface
-            chatbot = gr.Chatbot(
-                height=600,
-                show_copy_button=True,
-                avatar_images=("👤", "🤖"),
-                bubble_full_width=False,
-            )
-
-            # Message input
-            msg = gr.Textbox(
-                placeholder="Send a message...",
-                container=False,
-                scale=7,
-                show_label=False,
-            )
+            chatbot = gr.Chatbot(elem_id="chatbot", height=400)  # value is list of dicts
+            msg = gr.Textbox(placeholder="Send a message...", show_label=False)
 
             with gr.Row():
-                submit_btn = gr.Button("Send", variant="primary", scale=1)
-                clear_btn = gr.Button("Clear", variant="secondary", scale=1)
+                submit_btn = gr.Button("Send", variant="primary")
+                clear_btn = gr.Button("Clear", variant="secondary")
 
         with gr.Column(scale=1):
-            # Model settings sidebar
             gr.Markdown("### Model Settings")
 
             model_dropdown = gr.Dropdown(
@@ -73,31 +68,20 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="blue")) as demo:
                     label="Max Tokens"
                 )
 
-    # Set up event handlers
+    # Wire up events: outputs are (chatbot, msg) so textbox is cleared
     submit_btn.click(
         chat_with_grok,
         inputs=[msg, chatbot, system_message, model_dropdown, temperature, max_tokens],
-        outputs=[chatbot],
-    ).then(
-        lambda: "",
-        None,
-        msg,
-        queue=False
+        outputs=[chatbot, msg],
     )
 
     msg.submit(
         chat_with_grok,
         inputs=[msg, chatbot, system_message, model_dropdown, temperature, max_tokens],
-        outputs=[chatbot],
-    ).then(
-        lambda: "",
-        None,
-        msg,
-        queue=False
+        outputs=[chatbot, msg],
     )
 
-    clear_btn.click(lambda: None, None, chatbot, queue=False)
+    clear_btn.click(lambda: [], None, chatbot)
 
-# Launch the app
 if __name__ == "__main__":
     demo.launch()
