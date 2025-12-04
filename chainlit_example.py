@@ -1,14 +1,19 @@
 # app.py
-import asyncio
 import chainlit as cl
-from openai import AsyncOpenAI
-import time
+import ollama
 
-# Use OpenAI client pointing to Ollama
-client = AsyncOpenAI(
-    api_key="ollama",
-    base_url="http://localhost:11434/v1/"
-)
+
+def convert_latex_delimiters(text):
+    """Convert LaTeX delimiters from backslash-bracket to dollar signs"""
+    if not text:
+        return text
+    # Replace display math delimiters
+    text = text.replace(r'\[', '$$')
+    text = text.replace(r'\]', '$$')
+    # Replace inline math delimiters
+    text = text.replace(r'\(', '$')
+    text = text.replace(r'\)', '$')
+    return text
 
 
 @cl.on_message
@@ -17,8 +22,6 @@ async def on_message(message: cl.Message):
     Handles incoming messages from the user, sends them to the LLM,
     and streams the response back to the Chainlit interface with thinking process.
     """
-    start_time = time.time()
-
     # System prompt for the AI
     system_message = {
         "role": "system",
@@ -26,65 +29,82 @@ async def on_message(message: cl.Message):
 
 Your strengths:
 - Providing clear, accurate, and thoughtful responses
-- Breaking down complex topics into understandable explanations
-- Offering balanced perspectives on questions
 - Being helpful while acknowledging your limitations
 
 Guidelines:
 - If you're uncertain about something, acknowledge it rather than making up information
 - When appropriate, suggest related questions the user might want to ask
-- Maintain a friendly, respectful tone
 - Format your responses with markdown when it improves readability
 """
     }
 
+    # Create a step for thinking and messages for streaming
+    thinking_step = cl.Step(name="💭 Thinking", type="tool")
+    final_answer = cl.Message(content="")
+
+    accumulated_thinking = ""
+    accumulated_answer = ""
+
     try:
-        # Request completion from the model with streaming
-        stream = await client.chat.completions.create(
+        # Request completion from the model with streaming and thinking enabled
+        stream = ollama.chat(
             model="deepseek-r1:1.5b",
             messages=[
                 system_message,
                 {"role": "user", "content": message.content}
             ],
-            stream=True
+            stream=True,
+            think=True,  # This is the critical parameter for Ollama native API
         )
-    except Exception as e:
-        await cl.Message(content=f"Error generating response: {e}").send()
-        return
 
-    # Track whether we're in thinking mode
-    thinking = False
+        thinking_started = False
+        answer_started = False
+        answer_buffer = ""
 
-    # Create a step for thinking and a message for final answer
-    thinking_step = cl.Step(name="Thinking")
-    final_answer = cl.Message(content="")
+        # Stream the response to the UI
+        for chunk in stream:
+            chunk_msg = chunk.get("message", {})
 
-    # Stream the response to the UI
-    async for chunk in stream:
-        if chunk.choices[0].delta.content:
-            content = chunk.choices[0].delta.content
+            # Handle thinking content
+            if chunk_msg.get("thinking"):
+                if not thinking_started:
+                    thinking_started = True
+                    await thinking_step.send()
 
-            # Check for thinking tags
-            if content == "<think>":
-                thinking = True
-                await thinking_step.send()
-                continue
-
-            if content == "</think>":
-                thinking = False
-                thought_duration = round(time.time() - start_time)
-                thinking_step.name = f"Thought for {thought_duration}s"
+                thinking_text = chunk_msg["thinking"]
+                accumulated_thinking += thinking_text
+                thinking_step.output = convert_latex_delimiters(accumulated_thinking)
                 await thinking_step.update()
-                continue
 
-            # Stream to appropriate destination
-            if thinking:
-                await thinking_step.stream_token(content)
-            else:
-                await final_answer.stream_token(content)
+            # Handle answer content
+            if chunk_msg.get("content"):
+                if not answer_started:
+                    answer_started = True
+                    if thinking_started:
+                        # Finalize the thinking step
+                        await thinking_step.update()
+                    await final_answer.send()
 
-    # Send the final answer
-    await final_answer.send()
+                answer_text = chunk_msg["content"]
+                accumulated_answer += answer_text
+                answer_buffer += answer_text
+
+                # Only update every 10 characters or so to avoid overwhelming the socket
+                if len(answer_buffer) >= 10:
+                    await final_answer.stream_token(answer_buffer)
+                    answer_buffer = ""
+
+        # Send any remaining buffered content
+        if answer_buffer:
+            await final_answer.stream_token(answer_buffer)
+
+        # Update final answer with LaTeX conversion
+        final_answer.content = convert_latex_delimiters(accumulated_answer)
+        await final_answer.update()
+
+    except Exception as e:
+        error_msg = cl.Message(content=f"❌ Error generating response: {str(e)}")
+        await error_msg.send()
 
 
 @cl.on_chat_start
@@ -93,5 +113,6 @@ async def start():
     Sends a welcome message when the chat starts.
     """
     await cl.Message(
-        content="Hello! I'm powered by DeepSeek R1. I'll show you my thinking process before answering. Ask me anything!"
+        content="👋 Hello! I'm powered by **DeepSeek R1**. I'll show you my thinking process before answering.\n\nTry asking me a math problem or reasoning question!"
     ).send()
+
