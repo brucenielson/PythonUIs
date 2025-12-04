@@ -1,9 +1,12 @@
+# Run using: streamlit run streamlit_example.py
 import streamlit as st
 import ollama
 import time
 
+st.set_page_config(page_title="DeepSeek R1 Chat", page_icon="🤖")
 
-def stream_data(text, delay: float=0.02):
+
+def stream_data(text, delay: float = 0.02):
     for word in text.split():
         yield word + " "
         time.sleep(delay)
