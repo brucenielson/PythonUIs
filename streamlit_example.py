@@ -1,19 +1,18 @@
 # Run using: streamlit run streamlit_example.py
 import streamlit as st
 import ollama
-import re
 
 st.set_page_config(page_title="DeepSeek R1 Chat", page_icon="🤖")
 
 
 def convert_latex_delimiters(text):
     """Convert LaTeX delimiters from backslash-bracket to dollar signs"""
-    # Replace display math: \[ ... \] with $$ ... $$
-    text = re.sub(r'\\\[', '$$', text)
-    text = re.sub(r'\\\]', '$$', text)
-    # Replace inline math: \( ... \) with $ ... $
-    text = re.sub(r'\\\(', '$', text)
-    text = re.sub(r'\\\)', '$', text)
+    # Replace display math delimiters
+    text = text.replace(r'\[', '$$')
+    text = text.replace(r'\]', '$$')
+    # Replace inline math delimiters
+    text = text.replace(r'\(', '$')
+    text = text.replace(r'\)', '$')
     return text
 
 
