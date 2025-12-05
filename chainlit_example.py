@@ -1,4 +1,3 @@
-# app.py
 import chainlit as cl
 import ollama
 
